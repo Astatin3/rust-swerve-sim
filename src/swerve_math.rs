@@ -1,4 +1,5 @@
 use std::f32::consts::PI;
+use crate::swervemodule::SwerveModule;
 
 //https://github.com/Pantherbotics/SwerveSim/blob/master/src/main/java/com/pantherbotics/swervesim/util/Vector2d.java
 #[derive(Clone, Copy)]
@@ -7,9 +8,11 @@ pub struct Vector2d {
     pub(crate) y: f32
 }
 impl Vector2d {
-    pub const fn create(mut self, x:f32, y:f32) {
-        self.x = x;
-        self.y = y;
+    pub const fn create(x:f32, y:f32) -> Vector2d {
+        Vector2d {
+            x,
+            y
+        }
     }
 
     pub fn set(&mut self, x:f32, y:f32) {
@@ -17,9 +20,14 @@ impl Vector2d {
         self.y = y;
     }
 
+    pub fn add(&mut self, other: Vector2d) {
+        self.x += other.x;
+        self.y += other.y;
+    }
+
     pub fn rotate(&mut self, angle: f32) {
         let mag = f32::sqrt(self.x*self.x+self.y*self.y);
-        let ang = ((f32::atan2(self.y, self.x) + degrees_to_radians(angle)));
+        let ang = f32::atan2(self.y, self.x) + degrees_to_radians(angle);
         self.x = f32::cos(ang)*mag;
         self.y = f32::sin(ang)*mag;
     }
@@ -52,6 +60,10 @@ impl Vector2d {
     pub fn scalar_project(&mut self, mut vec: Vector2d) -> f32 {
         let mag = vec.magnitude();
         return self.dot(vec) / mag;
+    }
+
+    pub fn get_ang(self) -> f32 {
+        return radians_to_degrees(f32::atan2(self.y, self.x));
     }
 }
 

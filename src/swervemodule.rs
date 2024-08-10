@@ -1,3 +1,4 @@
+use std::process::id;
 use piston_window::{color, Context, Ellipse, G2d, Line, line, rectangle};
 use piston_window::math::Scalar;
 use crate::swerve_math;
@@ -37,9 +38,22 @@ impl SwerveModule {
         line(color::WHITE, 1.0,
              [screen_x as f64,
                  screen_y  as f64,
-                 (screen_x as f32 + self.vec.x) as f64,
-                 (screen_y as f32 + self.vec.y) as f64],
+                 (screen_x as f32 + self.vec.x*500.) as f64,
+                 (screen_y as f32 + self.vec.y*500.) as f64],
              c.transform, g);
+    }
+
+    pub fn get_rotation(&mut self) -> f32 {
+        if self.id == 1 {
+            return ((-45. + self.vec.get_ang() - self.swerve_rot) % 360.);
+        }else if self.id == 2 {
+            return ((45. + self.vec.get_ang() - self.swerve_rot) % 360.);
+        }else if self.id == 3 {
+            return ((135. + self.vec.get_ang() - self.swerve_rot) % 360.);
+        }else if self.id == 4 {
+            return ((-135. + self.vec.get_ang() - self.swerve_rot) % 360.);
+        }
+        return 0.;
     }
 
     fn get_swerve_corner_x(&mut self, id: i8) -> f32 {

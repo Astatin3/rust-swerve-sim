@@ -4,13 +4,14 @@ mod pid;
 
 extern crate piston_window;
 
+use std::f64::consts::TAU;
 use std::thread;
 use std::time::Duration;
 use piston_window::*;
 use piston_window::math::Scalar;
 use piston_window::rectangle::square;
 use piston_window::types::Color;
-use crate::swerve_math::{degrees_to_radians, get_heading, get_heading_x, get_heading_y, Vector2d};
+use crate::swerve_math::{degrees_to_radians, get_heading, get_heading_x, get_heading_y, radians_to_degrees, Vector2d};
 use crate::swervemodule::SwerveModule;
 
 
@@ -18,13 +19,14 @@ static SCREEN_SQUARE_SIZE:u32 = 1024;
 static SWERVE_CENTER_DISTANCE:u32 = SCREEN_SQUARE_SIZE/8;
 
 static XY_ACCEL:f32 = 0.2;
-static ROT_ACCEL:f32 = 0.001;
+static ROT_ACCEL:f32 = 0.5;
+static MAX_XY_VEL:f32 = 15.;
 static MAX_ROT_VEL:f32 = 32.;
 
-static VECTOR_SCALE:f32 = 20.;
+static VECTOR_SCALE:f32 = 2000.;
 
 static XY_FRICTION:f32 = 0.95;
-static ROT_FRICTION:f32 = 0.998;
+static ROT_FRICTION:f32 = 0.98;
 // static mut TIME: u64 = 0;
 
 
@@ -57,9 +59,12 @@ static mut W4:SwerveModule = SwerveModule::new(4);
 
 
 
-
+static mut TARGET_VEL_X: f32 = 0.;
+static mut TARGET_VEL_Y: f32 = 0.;
 static mut TARGET_R: f32 = 0.;
-static mut TARGET_R_DELTA: f32 = 2.;
+static TARGET_VEL_XY : f32 = 0.1;
+// static mut TARGET_R: f32 = 0.;
+static TARGET_R_DELTA: f32 = 4.;
 
 #[tokio::main]
 async fn main() {
@@ -100,39 +105,29 @@ async fn main() {
     }
 
     async unsafe fn update() {
-        // let mut pid_x: pid::PIDController = pid::PIDController::new(
-        //     2.,
-        //     0.1,
-        //     9.,
-        //     0.
-        // );
-        //
-        // let mut pid_y: pid::PIDController = pid::PIDController::new(
-        //     2.,
-        //     0.1,
-        //     9.,
-        //     0.
-        // );
-
         let mut pid_rot: pid::PIDController = pid::PIDController::new(
-            5.0,
-            0.1,
-            100.,
+            0.05,
+            0.,
+            0.2,
             0.
         );
 
 
         loop {
             if BUTTONS.key_w {
-                VEL_Y -= (XY_ACCEL);
+                TARGET_VEL_Y = -TARGET_VEL_XY;
             } else if BUTTONS.key_s {
-                VEL_Y += (XY_ACCEL);
+                TARGET_VEL_Y = TARGET_VEL_XY;
+            }else{
+                TARGET_VEL_Y = 0.;
             }
 
             if BUTTONS.key_a {
-                VEL_X -= (XY_ACCEL);
+                TARGET_VEL_X = -TARGET_VEL_XY;
             } else if BUTTONS.key_d {
-                VEL_X += (XY_ACCEL);
+                TARGET_VEL_X = TARGET_VEL_XY;
+            }else{
+                TARGET_VEL_X = 0.;
             }
 
             if BUTTONS.key_q {
@@ -147,21 +142,8 @@ async fn main() {
 
 
 
-            VEL_R += ROT_ACCEL*pid_rot.update(POS_R as f64, 1.) as f32;
 
-
-            VEL_R = f32::clamp(VEL_R, -MAX_ROT_VEL, MAX_ROT_VEL);
-
-            VEL_X *= XY_FRICTION;
-            VEL_Y *= XY_FRICTION;
-            VEL_R *= ROT_FRICTION;
-
-            // println!("{}", VEL_R);
-
-            POS_X += VEL_X;
-            POS_Y += VEL_Y;
-            POS_R += VEL_R;
-
+            // VEL_R = f32::clamp(VEL_R, -MAX_ROT_VEL, MAX_ROT_VEL);
 
 
             W1.swerve_rot = POS_R;
@@ -171,30 +153,71 @@ async fn main() {
 
 
             //Obtain joystick data and define the heading
-            let joyHeading = (get_heading(VEL_X, VEL_Y));
+            let joyHeading = get_heading(TARGET_VEL_X, TARGET_VEL_Y);
             let heading = joyHeading + POS_R;
-            let speed = swerve_math::get_joystick_speed(VEL_X, VEL_Y);
+            let speed = swerve_math::get_joystick_speed(TARGET_VEL_X, TARGET_VEL_Y);
+
+            let target_vel_r = pid_rot.update(POS_R as f64, 1.) as f32;
 
             //Define the steering vector components and the max vector length
-            let xr = VEL_R  * f32::cos(degrees_to_radians(45.)); // /2D normally
-            let yr = VEL_R  * f32::sin(degrees_to_radians(45.)); // /2D normally
+            let xr = target_vel_r * f32::cos(degrees_to_radians(45.)); // /2D normally
+            let yr = target_vel_r * f32::sin(degrees_to_radians(45.)); // /2D normally
 
             //Calculate the vectors for all wheels
             let x = get_heading_x(heading);
             let y = get_heading_y(heading);
 
 
-            W1.vec.set((x*speed + xr) * VECTOR_SCALE, (y*speed + yr) * VECTOR_SCALE);
-            W2.vec.set((x*speed + xr) * VECTOR_SCALE, (y*speed - yr) * VECTOR_SCALE);
-            W3.vec.set((x*speed - xr) * VECTOR_SCALE, (y*speed - yr) * VECTOR_SCALE);
-            W4.vec.set((x*speed - xr) * VECTOR_SCALE, (y*speed + yr) * VECTOR_SCALE);
-
-            println!("{}", W1.vec.x);
+            W1.vec.set((x*speed + xr), (y*speed + yr));
+            W2.vec.set((x*speed + xr), (y*speed - yr));
+            W3.vec.set((x*speed - xr), (y*speed - yr));
+            W4.vec.set((x*speed - xr), (y*speed + yr));
 
             W1.vec.rotate(POS_R);
             W2.vec.rotate(POS_R);
             W3.vec.rotate(POS_R);
             W4.vec.rotate(POS_R);
+
+            let DEGREES_PER_U:f32 = radians_to_degrees(1. / SWERVE_CENTER_DISTANCE as f32);
+
+            // println!("{}, {}, {}, {}",
+            //          f32::cos(degrees_to_radians(W1.get_rotation())),
+            //          f32::cos(degrees_to_radians(W2.get_rotation())),
+            //          f32::cos(degrees_to_radians(W3.get_rotation())),
+            //          f32::cos(degrees_to_radians(W4.get_rotation())));
+
+            // VEL_R = 1.2;
+
+            // println!("{}", W1.get_rotation());
+
+            VEL_R += (f32::cos(degrees_to_radians(W1.get_rotation())) * W1.vec.magnitude() * DEGREES_PER_U +
+                      f32::cos(degrees_to_radians(W2.get_rotation())) * W2.vec.magnitude() * DEGREES_PER_U +
+                      f32::cos(degrees_to_radians(W3.get_rotation())) * W3.vec.magnitude() * DEGREES_PER_U +
+                      f32::cos(degrees_to_radians(W4.get_rotation())) * W4.vec.magnitude() * DEGREES_PER_U) * ROT_ACCEL;
+
+
+            println!("{}", VEL_R);
+
+            let mut module_sum: Vector2d = Vector2d::create(0.,0.);
+            module_sum.add(W1.vec);
+            module_sum.add(W2.vec);
+            module_sum.add(W3.vec);
+            module_sum.add(W4.vec);
+
+            VEL_X += module_sum.x;
+            VEL_Y += module_sum.y;
+
+
+
+            VEL_X = VEL_X.clamp(-MAX_XY_VEL, MAX_XY_VEL) * XY_FRICTION;
+            VEL_Y = VEL_Y.clamp(-MAX_XY_VEL, MAX_XY_VEL) * XY_FRICTION;
+            VEL_R = VEL_R.clamp(-MAX_ROT_VEL, MAX_ROT_VEL) * ROT_FRICTION;
+
+            // println!("{}", VEL_R);
+
+            POS_X += VEL_X;
+            POS_Y += VEL_Y;
+            POS_R += VEL_R;
 
             thread::sleep(Duration::from_millis(10));
             // TIME += 1;
@@ -207,13 +230,20 @@ async fn main() {
         window.draw_2d(&event, |c, g, _d| unsafe {
             clear(color::BLACK, g);
 
+            line(color::BLUE, 1., [
+                SCREEN_SQUARE_SIZE as f64/2.,
+                SCREEN_SQUARE_SIZE as f64/2.,
+                (f32::cos(degrees_to_radians(POS_R)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
+                (f32::sin(degrees_to_radians(POS_R)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
+            ], c.transform, g);
 
             line(color::RED, 1., [
                 SCREEN_SQUARE_SIZE as f64/2.,
                 SCREEN_SQUARE_SIZE as f64/2.,
-                (f32::cos(degrees_to_radians(TARGET_R as f32)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
-                (f32::sin(degrees_to_radians(TARGET_R as f32)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
+                (f32::cos(degrees_to_radians(TARGET_R)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
+                (f32::sin(degrees_to_radians(TARGET_R)) * SWERVE_CENTER_DISTANCE as f32 + (SCREEN_SQUARE_SIZE/2) as f32) as f64,
             ], c.transform, g);
+
 
 
             draw_horizontal_line(POS_Y, &c, g);
