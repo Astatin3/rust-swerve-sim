@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 piston_window = "0.132.0"
+tokio = { version = "1.39.2", features = ["rt", "rt-multi-thread", "macros"] }
+find_folder = "*"

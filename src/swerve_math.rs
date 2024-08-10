@@ -3,19 +3,25 @@ use std::f32::consts::PI;
 //https://github.com/Pantherbotics/SwerveSim/blob/master/src/main/java/com/pantherbotics/swervesim/util/Vector2d.java
 #[derive(Clone, Copy)]
 pub struct Vector2d {
-    x: f32,
-    y: f32
+    pub(crate) x: f32,
+    pub(crate) y: f32
 }
 impl Vector2d {
-    pub fn create(mut self, x:f32, y:f32) {
+    pub const fn create(mut self, x:f32, y:f32) {
         self.x = x;
         self.y = y;
     }
-    pub fn rotate(mut self, angle: f32) {
-        let cos_a:f32 = f32::cos(angle * (PI / 180.0));
-        let sin_a:f32 = f32::sin(angle * (PI / 180.0));
-        self.x = self.x * cos_a - self.y * sin_a;
-        self.y = self.x * sin_a + self.y * cos_a;
+
+    pub fn set(&mut self, x:f32, y:f32) {
+        self.x = x;
+        self.y = y;
+    }
+
+    pub fn rotate(&mut self, angle: f32) {
+        let mag = f32::sqrt(self.x*self.x+self.y*self.y);
+        let ang = ((f32::atan2(self.y, self.x) + degrees_to_radians(angle)));
+        self.x = f32::cos(ang)*mag;
+        self.y = f32::sin(ang)*mag;
     }
 
     /**
@@ -24,7 +30,7 @@ impl Vector2d {
      * @param vec Vector with which to perform dot product.
      * @return Dot product of this vector with argument.
      */
-    pub fn dot(mut self, vec: Vector2d) -> f32 {
+    pub fn dot(&mut self, vec: Vector2d) -> f32 {
         return self.x * vec.x + self.y * vec.y;
     }
 
@@ -104,7 +110,7 @@ pub fn get_heading_x(mut angle:f32) -> f32 {
  * The angles are in degrees from getHeading()
  * @param angle The angle (from getHeading()) to get the Y value for
  */
-pub fn getHeadingY(mut angle:f32) -> f32 {
+pub fn get_heading_y(mut angle:f32) -> f32 {
     //Ensure values are [0, 360)
     while angle > 360. { angle -= 360.; }
     while angle < 0. { angle += 360.; }
@@ -141,8 +147,8 @@ pub fn approach_zero(value:f32, shift:f32) -> f32 {
  * @param X the X of a coordinate [-1, 1]
  * @param Y the Y of a coordinate [-1, 1]
  */
-pub fn get_joystick_speed(Y:f32, X:f32) -> f32 {
-    let mut v: Vector2d = Vector2d {x:X, y:Y};
+pub fn get_joystick_speed(y:f32, x:f32) -> f32 {
+    let mut v: Vector2d = Vector2d {x:x, y:y};
 
     let angle = f32::atan2(v.x, v.y);
     let max_magnitude = if f32::abs(v.x) > f32::abs(v.y) {1. / f32::sin(angle)} else {1. / f32::cos(angle)};
